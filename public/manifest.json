@@ -1,0 +1,9 @@
+{
+  "name": "Sistema de ventas del restaurante",
+  "short_name": "Restaurante",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f4ef",
+  "theme_color": "#b4452b",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

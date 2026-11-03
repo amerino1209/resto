@@ -1,0 +1,21 @@
+{
+  "name": "restaurante-pos",
+  "version": "1.0.0",
+  "description": "Sistema de ventas para restaurante: caja, meseros, cocina, reservas y reportes",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "dev": "node --watch --disable-warning=ExperimentalWarning server/index.js",
+    "demo": "node --disable-warning=ExperimentalWarning server/demo.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.22.3",
+    "socket.io": "^4.8.4"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "private": true
+}
