@@ -12,15 +12,18 @@ const S = {
 
 // ---------- utilidades ----------
 const pad = n => String(n).padStart(2, '0');
-const isoDate = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const isoDate = (d = new Date(serverNow())) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const addDays = (s, n) => { const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return isoDate(d); };
 const parseTs = s => new Date(String(s).replace(' ', 'T'));
-const mins = s => Math.max(0, Math.floor((Date.now() - parseTs(s)) / 60000));
+// Las horas vienen en la zona del restaurante; S.skew corrige dispositivos con otra zona u hora desfasada.
+const serverNow = () => Date.now() + (S.skew || 0);
+const mins = s => Math.max(0, Math.floor((serverNow() - parseTs(s)) / 60000));
+const nowStr = () => { const d = new Date(serverNow()); return `${isoDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const hhmm = s => String(s).slice(11, 16);
 const DOW = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 function money(n) {
   const cur = S.boot?.settings.currency || 'USD';
-  try { return new Intl.NumberFormat('es', { style: 'currency', currency: cur, maximumFractionDigits: 2 }).format(n || 0); }
+  try { return new Intl.NumberFormat(S.boot?.settings.locale || 'es-EC', { style: 'currency', currency: cur, maximumFractionDigits: 2 }).format(n || 0); }
   catch { return `${cur} ${(+n || 0).toFixed(2)}`; }
 }
 const round2 = n => Math.round((+n + Number.EPSILON) * 100) / 100;
@@ -81,6 +84,14 @@ document.addEventListener('mousemove', e => {
   tipEl.style.left = x + 'px'; tipEl.style.top = (e.clientY - 36) + 'px';
 });
 
+// Desglose de impuesto (Ecuador: base imponible + IVA 15 %)
+function taxLines(base, tax) {
+  const s = S.boot.settings, name = esc(s.tax_name || 'IVA');
+  if (!+s.tax_rate) return [];
+  const net = s.tax_included === '1' ? base - tax : base;
+  return [[`Base imponible ${s.tax_rate}%`, round2(net)], [`${name} ${s.tax_rate}%`, tax]];
+}
+
 // ---------- impresión 80 mm ----------
 function printHtml(html) {
   $('#print-area').innerHTML = html;
@@ -98,13 +109,13 @@ function receiptHtml(o, title = 'CUENTA') {
   const s = S.boot.settings;
   const items = o.items.filter(i => i.status !== 'anulado');
   return `<h1>${esc(s.restaurant_name)}</h1>
-    ${s.tax_id ? `<div class="c">${esc(s.tax_id)}</div>` : ''}${s.address ? `<div class="c">${esc(s.address)}</div>` : ''}
+    ${s.tax_id ? `<div class="c">RUC: ${esc(s.tax_id)}</div>` : ''}${s.address ? `<div class="c">${esc(s.address)}</div>` : ''}
     <div class="c">${title} #${o.id} · ${esc(o.table_name || o.customer || 'Para llevar')}</div>
-    <div class="c">${esc((o.closed_at || new Date().toLocaleString('es')).toString())}</div><hr>
+    <div class="c">${esc(String(o.closed_at || nowStr()).slice(0, 16))}</div><hr>
     ${items.map(i => `<div class="l"><span>${i.qty} ${esc(i.name)}</span><span>${money(i.qty * i.price)}</span></div>`).join('')}<hr>
     <div class="l"><span>Subtotal</span><span>${money(o.subtotal)}</span></div>
     ${o.discount ? `<div class="l"><span>Descuento</span><span>-${money(o.discount)}</span></div>` : ''}
-    ${+s.tax_rate ? `<div class="l"><span>Impuesto ${s.tax_rate}%${s.tax_included === '1' ? ' (incl.)' : ''}</span><span>${money(o.tax)}</span></div>` : ''}
+    ${taxLines(o.subtotal - (o.discount || 0), o.tax).map(([k, v]) => `<div class="l"><span>${k}</span><span>${money(v)}</span></div>`).join('')}
     ${o.tip ? `<div class="l"><span>Propina</span><span>${money(o.tip)}</span></div>` : ''}
     <div class="l big"><span>TOTAL</span><span>${money(o.total)}</span></div>
     ${(o.payments || []).map(p => `<div class="l"><span>${esc(p.method)}</span><span>${money(p.received || p.amount)}</span></div>${p.change > 0 ? `<div class="l"><span>Cambio</span><span>${money(p.change)}</span></div>` : ''}`).join('')}
@@ -129,7 +140,7 @@ function logout(silent) {
   S.token = null; S.user = null; S.socket?.disconnect(); S.socket = null;
   location.hash = ''; render();
 }
-async function loadBoot() { S.boot = await api('/bootstrap'); document.title = `${S.boot.settings.restaurant_name} · Ventas`; }
+async function loadBoot() { S.boot = await api('/bootstrap'); S.skew = parseTs(S.boot.server_time) - Date.now(); document.title = `${S.boot.settings.restaurant_name} · Ventas`; }
 
 function connectSocket() {
   if (S.socket || !window.io) return;
@@ -418,7 +429,7 @@ function viewPos(view, selId) {
         <div class="totals" style="margin-top:12px">
           <div class="spread"><span>Subtotal</span><span class="num">${money(o.subtotal)}</span></div>
           ${discount ? `<div class="spread"><span>Descuento</span><span class="num">−${money(discount)}</span></div>` : ''}
-          ${+s.tax_rate ? `<div class="spread muted"><span>Impuesto ${s.tax_rate}%${s.tax_included === '1' ? ' incluido' : ''}</span><span class="num">${money(t.tax)}</span></div>` : ''}
+          ${taxLines(o.subtotal - discount, t.tax).map(([k, v]) => `<div class="spread muted"><span>${k}</span><span class="num">${money(v)}</span></div>`).join('')}
           ${tip ? `<div class="spread"><span>Propina</span><span class="num">${money(tip)}</span></div>` : ''}
           <div class="spread big"><span>Total</span><span class="num">${money(t.total)}</span></div>
         </div>
@@ -479,7 +490,7 @@ function viewPos(view, selId) {
       { submit: async (fd, close) => { await api(`/orders/${sel}/cancel`, { body: { reason: fd.get('reason') } }); close(); sel = null; draw(); } }),
     cierre: async () => {
       const r = await api('/reports/summary');
-      const html = `<h1>CIERRE DE CAJA</h1><div class="c">${esc(S.boot.settings.restaurant_name)} · ${isoDate()}</div><hr>
+      const html = `<h1>CIERRE DE CAJA</h1><div class="c">${esc(S.boot.settings.restaurant_name)} · ${nowStr()}</div><hr>
         <div class="l"><span>Cuentas</span><span>${r.totals.orders}</span></div><div class="l"><span>Comensales</span><span>${r.totals.guests}</span></div>
         <div class="l"><span>Ventas (sin propina)</span><span>${money(r.totals.total - r.totals.tip)}</span></div>
         <div class="l"><span>Descuentos</span><span>${money(r.totals.discount)}</span></div><div class="l"><span>Impuestos</span><span>${money(r.totals.tax)}</span></div>
@@ -677,10 +688,11 @@ function viewAdmin(view) {
     if (tab === 'ajustes') { const s = b.settings;
       body = `<form data-submit="saveset" class="card" style="max-width:640px"><div class="form">
         <label style="grid-column:1/-1">Nombre del restaurante<input name="restaurant_name" value="${esc(s.restaurant_name)}"></label>
-        <label>Identificación fiscal<input name="tax_id" value="${esc(s.tax_id || '')}" placeholder="RUC / NIT / RFC"></label>
+        <label>RUC<input name="tax_id" value="${esc(s.tax_id || '')}" inputmode="numeric" pattern="\\d{13}" title="El RUC tiene 13 dígitos" placeholder="13 dígitos"></label>
         <label>Dirección<input name="address" value="${esc(s.address || '')}"></label>
-        <label>Moneda (código ISO)<input name="currency" value="${esc(s.currency)}" maxlength="3" placeholder="USD, MXN, COP, PEN…"></label>
-        <label>Impuesto %<input name="tax_rate" type="number" step="0.01" min="0" value="${esc(s.tax_rate)}"></label>
+        <label>Moneda (código ISO)<input name="currency" value="${esc(s.currency)}" maxlength="3" placeholder="USD"></label>
+        <label>Nombre del impuesto<input name="tax_name" value="${esc(s.tax_name || 'IVA')}"></label>
+        <label>Tarifa %<input name="tax_rate" type="number" step="0.01" min="0" value="${esc(s.tax_rate)}"></label>
         <label>Precios<select name="tax_included"><option value="1" ${s.tax_included === '1' ? 'selected' : ''}>Incluyen impuesto</option><option value="0" ${s.tax_included !== '1' ? 'selected' : ''}>Impuesto se suma al cobrar</option></select></label>
         <label style="grid-column:1/-1">Pie del ticket<input name="ticket_footer" value="${esc(s.ticket_footer || '')}"></label></div>
         <button class="btn primary" style="margin-top:16px">Guardar ajustes</button></form>`; }
