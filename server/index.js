@@ -52,6 +52,7 @@ app.post('/api/logout', auth(), h(req => {
 app.get('/api/me', auth(), h(req => req.user));
 
 app.get('/api/bootstrap', auth(), h(() => ({
+  server_time: now(),
   settings: getSettings(),
   categories: db.prepare('SELECT * FROM categories ORDER BY sort,name').all(),
   products: db.prepare('SELECT * FROM products ORDER BY name').all(),

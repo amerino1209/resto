@@ -3,6 +3,9 @@ const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 const fs = require('fs');
 
+// Hora local del restaurante (Ecuador). Se puede cambiar con la variable TZ.
+process.env.TZ = process.env.TZ || 'America/Guayaquil';
+
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new DatabaseSync(path.join(DATA_DIR, 'restaurante.db'));
@@ -64,12 +67,16 @@ CREATE INDEX IF NOT EXISTS idx_items_order ON order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_res_date ON reservations(date);
 `);
 
+// Ajustes por defecto para Ecuador: dólar, IVA 15 % incluido en los precios de la carta.
+const DEFAULT_SETTINGS = [['restaurant_name', 'Mi Restaurante'], ['country', 'EC'], ['currency', 'USD'], ['locale', 'es-EC'],
+  ['tax_name', 'IVA'], ['tax_rate', '15'], ['tax_included', '1'], ['tax_id', ''], ['address', ''], ['ticket_footer', '¡Gracias por su visita!']];
+
 function seed() {
+  // agrega los ajustes que falten sin tocar los que el administrador ya cambió
+  const set = db.prepare('INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)');
+  DEFAULT_SETTINGS.forEach(r => set.run(...r));
   const n = db.prepare('SELECT COUNT(*) c FROM users').get().c;
   if (n > 0) return;
-  const set = db.prepare('INSERT INTO settings(key,value) VALUES (?,?)');
-  [['restaurant_name', 'Mi Restaurante'], ['currency', 'USD'], ['locale', 'es'], ['tax_rate', '0'],
-   ['tax_included', '1'], ['ticket_footer', '¡Gracias por su visita!']].forEach(r => set.run(...r));
 
   const u = db.prepare('INSERT INTO users(name,pin,role) VALUES (?,?,?)');
   u.run('Administrador', '1234', 'admin');

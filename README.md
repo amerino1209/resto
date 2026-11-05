@@ -25,6 +25,12 @@ PIN de demostración (cámbialos en Administración → Usuarios): admin `1234`,
 
 Los datos quedan en `data/restaurante.db` (configurable con la variable `DATA_DIR`). Para respaldar, copia ese archivo.
 
+## Configuración para Ecuador
+
+Viene configurado de fábrica para Ecuador: dólares (`$17,00`), **IVA 15 % incluido** en los precios de la carta, hora de `America/Guayaquil` y RUC en el ticket. Caja y tickets muestran el desglose *Base imponible 15 %* + *IVA 15 %*. Todo se puede cambiar en Administración → Ajustes (por ejemplo, si prefieres que el IVA se sume al cobrar).
+
+> Los tickets y pre-cuentas son comprobantes internos. La factura electrónica autorizada por el SRI es un paso posterior (ver "Próximos pasos").
+
 ## Usarlo en el restaurante
 
 1. Instala el servidor en una computadora del local (o en la nube) y conecta todos los dispositivos a la misma red.
@@ -45,7 +51,7 @@ Los datos quedan en `data/restaurante.db` (configurable con la variable `DATA_DI
 
 ## Próximos pasos sugeridos
 
-- Facturación electrónica según el país.
+- Facturación electrónica con el SRI (comprobantes XML firmados con el certificado del RUC, directamente o mediante un proveedor autorizado).
 - Inventario y recetas (descontar insumos por plato vendido).
 - Impresión directa ESC/POS por red para varias estaciones (cocina, barra).
 - Varias sucursales y respaldos automáticos en la nube.
